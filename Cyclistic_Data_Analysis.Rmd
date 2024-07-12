@@ -1,0 +1,735 @@
+---
+title: "Cyclistic Data Analysis"
+output: html_notebook
+---
+
+# Case Study: How Can a Bike-Sharing Business Achieve Success?
+
+# Introduction
+
+This is my capstone project for Google Data Analytics Professional Certificate. In this case study, I will act as a Junior Data Analyst for a fictional bike-sharing company called Cyclistic. The steps of the data analysis process consist of five phase, those are **ask, prepare, process, analyze,** and **share**. I will follow this guideline in my data analysis.
+
+# Scenario
+
+You are a junior data analyst working on the marketing analyst team at Cyclistic, a bike sharing company in Chicago. The marketing director believes that the company's future success depends on maximizing the number of annual memberships. Therefore, your team wants to understand how casual riders and annual members use Cyclistic bikes differently. From these insights, your team will design new marketing strategies to convert regular riders into annual members. But first, Cyclistic executives must approve your recommendations, so they must be supported with compelling data insights and professional data visualizations.
+
+# About a Company
+
+In 2016, Cyclistic launched a successful bike sharing offering. Since then, the program has grown to a fleet of 5,824 bikes that are geo-tracked and locked into a network of 692 stations throughout Chicago. Bicycles can be accessed from one station and returned to any other station at any time within the system.
+
+To date, Cyclistic's marketing strategy has relied on building general awareness and appealing to broad consumer segments. One approach that helps make this happen is price flexibility: one-way tickets, full-day tickets, and annual memberships. Customers who purchase a one-way ticket or a full-day ticket are referred to as casual riders. Customers who purchase annual memberships are Cyclistic members.
+
+Cyclistic's financial analysts have concluded that annual members are much more profitable than regular riders. While pricing flexibility helps Cyclistic attract more customers, Moreno believes that maximizing the number of annual members will be key to future growth. Rather than create a marketing campaign targeting new customers, Moreno believes there is an opportunity to convert regular riders into members. He noted that casual riders are already aware of the Cyclistic program and have chosen Cyclistic for their mobility needs.
+
+Moreno has set a clear goal: Design a marketing strategy aimed at converting regular riders into annual members. However, to do so, marketing analyst teams need to better understand the differences between annual members and regular riders, why riders will be willing to purchase memberships, and how digital media can impact their marketing tactics. Moreno and his team were interested in analyzing Cyclistic's bike trip data to identify trends.
+
+# Characters and Team
+
+-   **Lily Moreno:** Cyclistic Director of Marketing. Moreno is responsible for the development of campaigns and initiatives to promote the bike-share program. These may include email, social media, and other channels.
+-   **Cyclistic Marketing Analyst Team:** A team of data analysts who are responsible for collecting, analyzing, and reporting data that helps guide Cyclistic marketing strategy.
+-   **Cyclistic Executive Team:** The executive team that will decide whether to approve the recommended marketing program.
+
+# Phase 1: Ask
+
+-   **Questions for the analysis**
+
+    1.  How do annual members and regular riders use their bikes differently?
+    2.  Why do regular riders buy an annual Cyclistic membership?
+    3.  How does Cyclistic use digital media to influence regular riders to become members?
+
+-   **Business Task**
+
+    How do annual members and regular riders use their bikes differently?
+
+-   **Key Stakeholders**
+
+    The main stakeholders here are Lily Moreno, Marketing Analyst Team, and Executive Team.
+
+# Phase 2: Prepare
+
+-   **Determine the credibility of the data**
+
+    The dataset used for this project was obtained from [Divvy Data](https://divvybikes.com/system-data). This data is provided according to the [Divvy Data License Agreement](https://www.divvybikes.com/data-license-agreement) and released on a monthly schedule. This data contain trip start day and time, trip end day and time, trip start station, trip end station, and rider type (member & casual).
+
+-   **Sort and filter dataset**
+
+    I use [Divvy Data](https://divvybikes.com/system-data) historical trip data in 2023 for this project because it is the most recent data where there is data from January 2023 until December 2023.
+
+    ```{r}
+    # Add library for analysis
+    library("tidyverse")
+    library("lubridate")
+    library("geosphere")
+    library("gridExtra") 
+    library("ggmap")
+    library("skimr")
+    library("hms")
+    library("plotly")
+    library("scales")
+    ```
+
+    ```{r}
+    # Lets import and merge our dataset
+
+    path <- "D:/Data Analytics Course/Proyek Akhir Analitis Data Google/Modul 2/Dataset"
+    all_files <- list.files(path, pattern = "*.csv", full.names = TRUE)
+    tripdata_2023 <- bind_rows(lapply(all_files, read_csv))
+    ```
+
+# Phase 3: Process
+
+At this stage, we have to make sure our data is clean and ready for us to analyze. Let's explore the data.
+
+```{r}
+skim(tripdata_2023)
+```
+
+Here are the sample of our dataset
+
+```{r}
+head(tripdata_2023)
+```
+
+-   **Check for duplicate data**
+
+    First, we need to make sure that every data we have is unique and don't have same value. We check it by counting how many unique ride_id in this dataset. Based on number of ride_id's and the shape of the dataset we have, all the data we have is unique and there are no duplicates so we don't need to drop some data so far.
+
+-   **Drop unnecesary column**
+
+    From our dataset that we use, we have to drop 'ride_id', 'start_station_id', and 'end_station_id' because we don't need the id from user and we already have the station name in our dataset.
+
+    ```{r}
+    tripdata_2023_clean <- tripdata_2023 %>% 
+      select(-ride_id, -start_station_id, -end_station_id)
+    ```
+
+    Let's see the result
+
+    ```{r}
+    head(tripdata_2023_clean)
+    ```
+
+-   **Add 'ride_length' column**
+
+    We want to know how member user and casual user use Cyclistic based on how long they ride the bike by substract the end time and start time.
+
+    ```{r}
+    tripdata_2023_clean$ride_length <- round(difftime(tripdata_2023_clean$ended_at, tripdata_2023_clean$started_at, units = "mins"), 2)
+    ```
+
+    Let's see the result
+
+    ```{r}
+    head(tripdata_2023_clean)
+    ```
+
+    So far it's okay, but let's find out to see if there are ride length with less than equal to 0.
+
+    ```{r}
+    # Check ride length value with less than equal to 0 minute
+    check_ride_length_less_than_equal_0 <- tripdata_2023_clean %>%
+      filter(ride_length <= 0)
+
+    print(check_ride_length_less_than_equal_0)
+    ```
+
+    There is some data with a value below 0 and some data with a value of 0 so the data must be deleted.
+
+    ```{r}
+    tripdata_2023_clean <- subset(tripdata_2023_clean, ride_length > 0)
+    ```
+
+-   **Add 'day_of_week' column**
+
+    We also want to know when a member or casual user of Cyclistic uses the Cyclistic app in 2023. So we need to separate the started_at column into date, day, month, year, day of the week, and hour.
+
+    ```{r}
+    # Let's separate the started_at column into date, month
+    # day of the week, and time
+
+    tripdata_2023_clean$started_at_date <- as.Date(tripdata_2023_clean$started_at)
+    tripdata_2023_clean$started_at_month <- month(tripdata_2023_clean$started_at_date, label = TRUE)
+    tripdata_2023_clean$started_at_day_of_week <- wday(tripdata_2023_clean$started_at_date, label = TRUE, abbr = FALSE, week_start = 1)
+    tripdata_2023_clean$started_at_time <- as_hms(format(tripdata_2023_clean$started_at, "%H:%M:%S"))
+    ```
+
+    Let's see our new dataframe
+
+    ```{r}
+    head(tripdata_2023_clean)
+    ```
+
+-   **Add 'ride_distance' column**
+
+    We can have new insight from Cyclistic user by knowing how far they ride the bike to another bike station. We have all coordinate from every bike station in Chicago and we need to make sure that there are no null value in the coordinate column.
+
+    ```{r}
+    skim(tripdata_2023_clean, start_lat, start_lng, end_lat, end_lng)
+    ```
+
+    There are a few data with end latitude point and end longitude point with null value, but there are any possibility the bike station have a station name. Before we do that, we also have to round off the coordinate values for each station because they have a lot of numbers after the comma.
+
+    ```{r}
+    # Round the coordinate value of each station to 5 decimal places
+    tripdata_2023_clean <- tripdata_2023_clean %>% 
+      mutate(
+        start_lat = round(start_lat, 5),
+        start_lng = round(start_lng, 5),
+        end_lat = round(end_lat, 5),
+        end_lng = round(end_lng, 5)
+      )
+
+    # Check end station names that do not have coordinates
+    check_end_station_name <- tripdata_2023_clean %>%
+      filter(!is.na(end_station_name) & is.na(end_lat) & is.na(end_lng)) %>%
+      select(end_station_name)
+
+    unique_end_station_name <- as.data.frame(table(check_end_station_name))
+    colnames(unique_end_station_name) <- c("end_station_name", "frequency")
+    print(unique_end_station_name)
+    ```
+
+    There are five end station without coordinate, including Halsted St & Fulton St, Stony Island Ave & 63rd St, Lincoln Ave & Byron St, Elizabeth St & Randolph St, and Drexel Ave & 60th St. We can fill the coordinate based on the station name. Before that, we need to make sure that every station only have one value of coordinate.
+
+    ```{r}
+    # For example, let's check coordinate value for Halsted St & Fulton St station
+    check_halsted_end_station <- tripdata_2023_clean %>%
+      filter(end_station_name == "Halsted St & Fulton St") %>%
+      select(end_station_name, end_lat, end_lng)
+
+    # Check if there are more than one coordinate value
+    unique_halsted_end_station_coord <- as.data.frame(table(check_halsted_end_station))
+    colnames(unique_halsted_end_station_coord) <- c("end_station_name", "end_lat", "end_lng", "frequency")
+    print(unique_halsted_end_station_coord)
+    ```
+
+    Halsted St & Fulton St mostly located at (41.88687, -87.64809). So let's fill the coordinate for Halsted St & Fulton St station.
+
+    ```{r}
+    # Fill NA end station coordinate for Halsted St & Fulton St station
+    tripdata_2023_clean$end_lat[tripdata_2023_clean$end_station_name == "Halsted St & Fulton St" & is.na(tripdata_2023_clean$end_lat)] <- 41.88687
+    tripdata_2023_clean$end_lng[tripdata_2023_clean$end_station_name == "Halsted St & Fulton St" & is.na(tripdata_2023_clean$end_lng)] <- -87.64809
+    ```
+
+    Let's check coordinate value for Stony Island Ave & 63rd St station.
+
+    ```{r}
+    check_stony_end_station <- tripdata_2023_clean %>%
+      filter(end_station_name == "Stony Island Ave & 63rd St") %>%
+      select(end_station_name, end_lat, end_lng)
+
+    # Check if there are more than one coordinate value
+    unique_stony_end_station_coord <- as.data.frame(table(check_stony_end_station))
+    colnames(unique_stony_end_station_coord) <- c("end_station_name", "end_lat", "end_lng", "frequency")
+    print(unique_stony_end_station_coord)
+    ```
+
+    Stony Island Ave & 63rd St mostly located at (41.78051, -87.58685), therefore we fill null and 0 values with (41.78051, -87.58685).
+
+    ```{r}
+    # Fill NA and 0 end station coordinate for Stony Island Ave & 63rd St station
+    tripdata_2023_clean$end_lat[tripdata_2023_clean$end_station_name == "Stony Island Ave & 63rd St" & (is.na(tripdata_2023_clean$end_lat) | tripdata_2023_clean$end_lat == 0)] <- 41.78051
+    tripdata_2023_clean$end_lng[tripdata_2023_clean$end_station_name == "Stony Island Ave & 63rd St" & (is.na(tripdata_2023_clean$end_lng) | tripdata_2023_clean$end_lng == 0)] <- -87.58685
+    ```
+
+    Let's check coordinate value for Lincoln Ave & Byron St station.
+
+    ```{r}
+    check_lincoln_end_station <- tripdata_2023_clean %>%
+      filter(end_station_name == "Lincoln Ave & Byron St") %>%
+      select(end_station_name, end_lat, end_lng)
+
+    # Check if there are more than one coordinate value
+    unique_lincoln_end_station_coord <- as.data.frame(table(check_lincoln_end_station))
+    colnames(unique_lincoln_end_station_coord) <- c("end_station_name", "end_lat", "end_lng", "frequency")
+    print(unique_lincoln_end_station_coord)
+    ```
+
+    Lincoln Ave & Byron St mostly located at (41.95237, -87.6773), therefore we fill null values with (41.95237, -87.6773).
+
+    ```{r}
+    # Fill NA end station coordinate for Lincoln Ave & Byron St station
+    tripdata_2023_clean$end_lat[tripdata_2023_clean$end_station_name == "Lincoln Ave & Byron St" & is.na(tripdata_2023_clean$end_lat)] <- 41.95237
+    tripdata_2023_clean$end_lng[tripdata_2023_clean$end_station_name == "Lincoln Ave & Byron St" & is.na(tripdata_2023_clean$end_lng)] <- -87.6773
+    ```
+
+    Let's check coordinate value for Elizabeth St & Randolph St station.
+
+    ```{r}
+    check_elizabeth_end_station <- tripdata_2023_clean %>%
+      filter(end_station_name == "Elizabeth St & Randolph St") %>%
+      select(end_station_name, end_lat, end_lng)
+
+    # Check if there are more than one coordinate value
+    unique_elizabeth_end_station_coord <- as.data.frame(table(check_elizabeth_end_station))
+    colnames(unique_elizabeth_end_station_coord) <- c("end_station_name", "end_lat", "end_lng", "frequency")
+    print(unique_elizabeth_end_station_coord)
+    ```
+
+    Elizabeth St & Randolph St mostly located at (41.88434, -87.6589), therefore we fill null values with (41.88434, -87.6589).
+
+    ```{r}
+    # Fill NA end station coordinate for Elizabeth St & Randolph St station
+    tripdata_2023_clean$end_lat[tripdata_2023_clean$end_station_name == "Elizabeth St & Randolph St" & is.na(tripdata_2023_clean$end_lat)] <- 41.88434
+    tripdata_2023_clean$end_lng[tripdata_2023_clean$end_station_name == "Elizabeth St & Randolph St" & is.na(tripdata_2023_clean$end_lng)] <- -87.6589
+    ```
+
+    Let's check coordinate value for Drexel Ave & 60th St station.
+
+    ```{r}
+    check_drexel_end_station <- tripdata_2023_clean %>%
+      filter(end_station_name == "Drexel Ave & 60th St") %>%
+      select(end_station_name, end_lat, end_lng)
+
+    # Check if there are more than one coordinate value
+    unique_drexel_end_station_coord <- as.data.frame(table(check_drexel_end_station))
+    colnames(unique_drexel_end_station_coord) <- c("end_station_name", "end_lat", "end_lng", "frequency")
+    print(unique_drexel_end_station_coord)
+    ```
+
+    Drexel Ave & 60th St is located at (41.78586, -87.60455). So let's fill the coordinate for Drexel Ave & 60th St.
+
+    ```{r}
+    # Fill NA end station coordinate for Drexel Ave & 60th St station
+    tripdata_2023_clean$end_lat[tripdata_2023_clean$end_station_name == "Drexel Ave & 60th St" & is.na(tripdata_2023_clean$end_lat)] <- 41.78586
+    tripdata_2023_clean$end_lng[tripdata_2023_clean$end_station_name == "Drexel Ave & 60th St" & is.na(tripdata_2023_clean$end_lng)] <- -87.60455
+    ```
+
+    Let's check the null value again for end_lat column and end_lng column.
+
+    ```{r}
+    skim(tripdata_2023_clean, end_lat, end_lng)
+    ```
+
+    There are still a few data with end latitude point and end longitude point with null value, so let's drop it.
+
+    ```{r}
+    tripdata_2023_clean <- tripdata_2023_clean %>% drop_na(c(end_lat, end_lng))
+    ```
+
+    After removing null value in end_lat and end_lng column, we count ride distance in km.
+
+    ```{r}
+    # Add ride_distance column in km
+    tripdata_2023_clean$ride_distance <- distGeo(matrix(c(tripdata_2023_clean$start_lat, tripdata_2023_clean$start_lng), ncol = 2), matrix(c(tripdata_2023_clean$end_lat, tripdata_2023_clean$end_lng), ncol = 2))
+
+    # The default output from distGeo function is in m, so we convert it to km
+    tripdata_2023_clean$ride_distance <- round(tripdata_2023_clean$ride_distance/1000, 3)
+    tripdata_2023_clean <- tripdata_2023_clean %>% 
+      filter(ride_distance != 0)
+    ```
+
+    ```{r}
+    head(tripdata_2023_clean)
+    ```
+
+-   **Check NULL value**
+
+    Let's see how many null value in our dataset so far.
+
+    ```{r}
+    skim(tripdata_2023_clean)
+    ```
+
+    There are some null value in start_station_name column and end_station_name column. Based on previous step where we replace null coordinate based on station name, we can't replace start_station_name or end_station_name with null value based on coordinate value because there are possibility that one station have more than one coordinate value. Therefore, we remove the data where start_station_name and end_station_name have null value.
+
+    ```{r}
+    tripdata_2023_clean <- drop_na(tripdata_2023_clean)
+    ```
+
+    ```{r}
+    skim(tripdata_2023_clean)
+    ```
+
+# Phase 4: Analyze
+
+At this stage, we have to identify trends and relationships from our clean dataset.
+
+```{r}
+head(tripdata_2023_clean)
+```
+
+Let's see some trends in our dataset based on member type
+
+```{r}
+# Analyze data based on user type
+cyclistic_users_type <- tripdata_2023_clean %>%
+  group_by(member_casual) %>% 
+  summarise(users_sum = n(), ride_length_mean = mean.difftime(ride_length), ride_distance_mean = mean(ride_distance))
+
+# Cyclistic Member Distribution Pie Chart
+cyclistic_total_users <- sum(cyclistic_users_type$users_sum)
+cyclistic_users_pie_chart <- cyclistic_users_type %>% 
+  plot_ly(labels = ~member_casual, 
+          values = ~users_sum, 
+          type = 'pie', 
+          textposition = 'inside', 
+          textinfo = 'label+percent', 
+          insidetextfont = list(color = '#FFFFFF'), 
+          hoverinfo = 'text', 
+          text = ~paste(users_sum, 'users'), 
+          marker = list(colors = list("#FF00BF", "#00ADEF")),
+          showlegend = FALSE)
+
+cyclistic_users_pie_chart <- cyclistic_users_pie_chart %>% 
+  layout(title = paste("Cyclistic Users Distribution in 2023 (Total Users =", cyclistic_total_users, ")"))
+
+cyclistic_users_pie_chart
+```
+
+Analysis:
+
+-   Cyclistic has 4,147,334 users of which 65.6% are members and 34.4% are casual users on 2023.
+
+```{r}
+# Analyze what types of bikes are most frequently used by users
+cyclistic_users_and_bike_type <- tripdata_2023_clean %>%
+  group_by(member_casual, rideable_type) %>% 
+  summarise(total_bikes = n(), .groups = "drop")
+
+users_and_bike_type_bar_chart <- cyclistic_users_and_bike_type %>% 
+  ggplot(mapping = aes(x = rideable_type, y = total_bikes, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Bike Type Distribution by User Type (2023)", x = "Bike Type", y = "Total Bikes", fill = "User Type") +
+  theme_minimal() +
+  scale_fill_manual(values = c("member" = "#00ADEF", "casual" = "#FF00BF"))
+
+users_and_bike_type_bar_chart
+```
+
+Analysis:
+
+-   Cyclistic members never use docked bike.
+
+-   Classic bike is the most popular bike for Cyclistic users.
+
+-   Electric bike is the second choice bike if the classic bike not available at the bike station.
+
+```{r}
+# Analyze how many rides by day of the week
+cyclistic_day_of_week <- tripdata_2023_clean %>%
+  group_by(member_casual, started_at_day_of_week) %>% 
+  summarise(total_rides = n(), .groups = "drop")
+
+day_of_week_bar_chart <- cyclistic_day_of_week %>% 
+  ggplot(mapping = aes(x = started_at_day_of_week, y = total_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Number of Rides by User Type During The Week (2023)", x = "Day of Week", y = "Total Rides", fill = "User Type") +
+  theme_minimal() +
+  scale_fill_manual(values = c("member" = "#00ADEF", "casual" = "#FF00BF"))
+
+day_of_week_bar_chart
+```
+
+Analysis:
+
+-   Cyclistic members mostly rides on Tuesday, Wednesday, and Thursday.
+
+-   Cyclistic casual users mostly rides on Saturday.
+
+-   The number of rides for Cyclistic members starts to increase from Monday, slowly decrease from Thursday and reach the lowest point on Sunday.
+
+-   The number of rides for Cyclistic casual users starts to increase from Monday and starts to decrease on Sunday.
+
+-   The lowest number of rides for Cyclistic casual users is on Monday.
+
+```{r}
+# Analyze how many rides by month
+cyclistic_months <- tripdata_2023_clean %>%
+  group_by(member_casual, started_at_month) %>% 
+  summarise(total_rides = n(), .groups = "drop")
+
+months_bar_chart <- cyclistic_months %>% 
+  ggplot(mapping = aes(x = started_at_month, y = total_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  labs(title = "Number of Rides by User Type During The Year (2023)", x = "Months", y = "Total Rides", fill = "User Type") +
+  theme_minimal() +
+  scale_fill_manual(values = c("member" = "#00ADEF", "casual" = "#FF00BF"))
+
+months_bar_chart
+```
+
+Analysis:
+
+-   The highest number of rides for Cyclistic members during the year is on August.
+
+-   The lowest number of rides for Cyclistic members during the year is on February.
+
+-   The number of rides for Cyclistic members during the year starts to increase from January, peaks on August, and slowly decrease from September.
+
+-   The highest number of rides for Cyclistic casual users during the year is on July.
+
+-   The lowest number of rides for Cyclistic casual users during the year is on January.
+
+-   The number of rides for Cyclistic casual users during the year starts to increase from January, peaks on July, and slowly decrease from August.
+
+-   The number of rides during the year patterns follows a clear pattern of seasonality in Chicago where the highest number of rides is during Summer (July and August) and the lowest number of rides is during Winter (January).
+
+```{r}
+# Analyze how many rides during the day
+# Number of rides during the day by Cyclistic Members
+cyclistic_member_departure_times <- tripdata_2023_clean %>%
+  filter(member_casual == "member") %>% 
+  group_by(started_at_time) %>% 
+  summarise(total_rides = n())
+
+member_departure_times_bar_chart <- cyclistic_member_departure_times %>% 
+  ggplot(mapping = aes(x = started_at_time, y = total_rides)) +
+  geom_bar(color = "#00ADEF", stat = "identity") +
+  labs(title = "Number of Rides During The Day by Cyclistic Members (2023)", x = "Departure Times", y = "Total Rides") +
+  scale_x_time(labels = function(x) format(x, "%H:%M"), breaks = breaks_width("3 hours")) +
+  theme_minimal()
+
+# Number of rides during the day by Cyclistic Casual Users
+cyclistic_casual_departure_times <- tripdata_2023_clean %>%
+  filter(member_casual == "casual") %>% 
+  group_by(started_at_time) %>% 
+  summarise(total_rides = n())
+
+casual_departure_times_bar_chart <- cyclistic_casual_departure_times %>% 
+  ggplot(mapping = aes(x = started_at_time, y = total_rides)) +
+  geom_bar(color = "#FF00BF", stat = "identity") +
+  labs(title = "Number of Rides During The Day by Cyclistic Casual Users (2023)", x = "Departure Times", y = "Total Rides") +
+  scale_x_time(labels = function(x) format(x, "%H:%M"), breaks = breaks_width("3 hours")) +
+  theme_minimal()
+
+grid.arrange(member_departure_times_bar_chart, casual_departure_times_bar_chart, nrow = 2)
+```
+
+Analysis:
+
+-   The number of rides by Cyclistic members starts to increase from 6:00 AM until 9:00 AM, slowly decrease until noon, and starts increasing again with most of rides is around 6:00 PM.
+
+-   The number of rides by Cyclistic casual users starts to increase from 6:00 AM and reach peaks around 6:00 PM.
+
+```{r}
+# Analyze average distance traveled and average ride length
+average_distance_traveled <- cyclistic_users_type %>% 
+  ggplot(mapping = aes(x = member_casual, y = ride_distance_mean, fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Distance Traveled by Cyclistic Users Type (2023)", x = "Users Type", y = "Average Distance Traveled (km)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("member" = "#00ADEF", "casual" = "#FF00BF"))
+
+average_ride_length <- cyclistic_users_type %>% 
+  ggplot(mapping = aes(x = member_casual, y = as.numeric(ride_length_mean, units = "mins"), fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Ride Length by Cyclistic Users Type (2023)", x = "Users Type", y = "Average Ride Length (minute)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("member" = "#00ADEF", "casual" = "#FF00BF"))
+
+average_distance_traveled
+average_ride_length
+```
+
+Analysis:
+
+-   The average distance traveled by casual users and Cyclistic members is similar.
+
+-   On average, casual users ride longer than Cyclistic members.
+
+```{r}
+# Analyze the most popular bike station for arrival and departure
+# Most Popular Bike Station for Arrival
+cyclistic_arrival_stations <- tripdata_2023_clean %>%
+  group_by(end_station_name) %>% 
+  summarise(total_rides = n()) %>% 
+  slice_max(order_by = total_rides, n = 10) %>% 
+  mutate(end_station_name = reorder(end_station_name, total_rides))
+
+arrival_bar_chart <- cyclistic_arrival_stations %>% 
+  ggplot(mapping = aes(x = total_rides, y = end_station_name)) +
+  geom_col(position = "dodge", fill = "#735FD9") +
+  labs(title = "Top 10 Most Popular Bike Station for Arrival (2023)", x = "Total Rides", y = "Bike Station Names") +
+  theme_minimal()
+
+# Most Popular Bike Station for Arrival by Cyclistic Members
+cyclistic_member_arrival_stations <- tripdata_2023_clean %>%
+  filter(member_casual == "member") %>% 
+  group_by(end_station_name) %>% 
+  summarise(total_rides = n()) %>% 
+  slice_max(order_by = total_rides, n = 10) %>% 
+  mutate(end_station_name = reorder(end_station_name, total_rides))
+
+member_arrival_bar_chart <- cyclistic_member_arrival_stations %>% 
+  ggplot(mapping = aes(x = total_rides, y = end_station_name)) +
+  geom_col(position = "dodge", fill = "#00ADEF") +
+  labs(title = "Top 10 Most Popular Bike Station for Arrival by Cyclistic Member (2023)", x = "Total Rides", y = "Bike Station Names") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+
+# Most Popular Bike Station for Arrival by Cyclistic Casual
+cyclistic_casual_arrival_stations <- tripdata_2023_clean %>%
+  filter(member_casual == "casual") %>% 
+  group_by(end_station_name) %>% 
+  summarise(total_rides = n()) %>% 
+  slice_max(order_by = total_rides, n = 10) %>% 
+  mutate(end_station_name = reorder(end_station_name, total_rides))
+
+casual_arrival_bar_chart <- cyclistic_casual_arrival_stations %>% 
+  ggplot(mapping = aes(x = total_rides, y = end_station_name)) +
+  geom_col(position = "dodge", fill = "#FF00BF") +
+  labs(title = "Top 10 Most Popular Bike Station for Arrival by Cyclistic Casual Users (2023)", x = "Total Rides", y = "Bike Station Names") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 8))
+
+# Most Popular Bike Station for Departure
+cyclistic_departure_stations <- tripdata_2023_clean %>%
+  group_by(start_station_name) %>% 
+  summarise(total_rides = n()) %>% 
+  slice_max(order_by = total_rides, n = 10) %>% 
+  mutate(start_station_name = reorder(start_station_name, total_rides))
+
+departure_bar_chart <- cyclistic_departure_stations %>% 
+  ggplot(mapping = aes(x = total_rides, y = start_station_name)) +
+  geom_col(position = "dodge", fill = "#735FD9") +
+  labs(title = "Top 10 Most Popular Bike Station for Departure (2023)", x = "Total Rides", y = "Bike Station Names") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 13))
+
+# Most Popular Bike Station for Departure by Cyclistic Members
+cyclistic_member_departure_stations <- tripdata_2023_clean %>%
+  filter(member_casual == "member") %>% 
+  group_by(start_station_name) %>% 
+  summarise(total_rides = n()) %>% 
+  slice_max(order_by = total_rides, n = 10) %>% 
+  mutate(start_station_name = reorder(start_station_name, total_rides))
+
+member_departure_bar_chart <- cyclistic_member_departure_stations %>% 
+  ggplot(mapping = aes(x = total_rides, y = start_station_name)) +
+  geom_col(position = "dodge", fill = "#00ADEF") +
+  labs(title = "Top 10 Most Popular Bike Station for Departure by Cyclistic Member (2023)", x = "Total Rides", y = "Bike Station Names") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+
+# Most Popular Bike Station for Departure by Cyclistic Casual
+cyclistic_casual_departure_stations <- tripdata_2023_clean %>%
+  filter(member_casual == "casual") %>% 
+  group_by(start_station_name) %>% 
+  summarise(total_rides = n()) %>% 
+  slice_max(order_by = total_rides, n = 10) %>% 
+  mutate(start_station_name = reorder(start_station_name, total_rides))
+
+casual_departure_bar_chart <- cyclistic_casual_departure_stations %>% 
+  ggplot(mapping = aes(x = total_rides, y = start_station_name)) +
+  geom_col(position = "dodge", fill = "#FF00BF") +
+  labs(title = "Top 10 Most Popular Bike Station for Departure by Cyclistic Casual Users (2023)", x = "Total Rides", y = "Bike Station Names") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 8))
+
+# Show Diagrams
+arrival_bar_chart
+member_arrival_bar_chart
+casual_arrival_bar_chart
+departure_bar_chart
+member_departure_bar_chart
+casual_departure_bar_chart
+```
+
+Analysis:
+
+-   Streeter Dr & Grand Ave Bike Station is the most popular bike stations for arrival and departure reaching around 50.000 rides.
+
+-   Streeter Dr & Grand Ave Bike Station also the most popular bike stations for arrival and departure by casual Cyclistic users.
+
+-   Clinton St & Washington Blvd Bike Station is the most popular bike stations for arrival and departure by member of Cyclistic.
+
+```{r}
+# Create bounding box and get Stadia Outdoors map of Chicago and Evanston
+chi_ev_bb <- c(
+  left = -87.750424,  
+  bottom = 41.790769, 
+  right = -87.574949, 
+  top = 42.064536
+)
+
+chi_ev_map <- get_stadiamap(
+  bbox = chi_ev_bb, zoom = 11, maptype = "stamen_toner"
+)
+
+# Analyze Most Popular Routes by Cyclistic Users 
+cyclistic_routes <- tripdata_2023_clean %>%
+  group_by(start_lat, start_lng, end_lat, end_lng, member_casual, rideable_type) %>% 
+  summarise(total_rides = n(), .groups = "drop") %>% 
+  filter(total_rides > 250) %>%
+  filter(
+    between(start_lat, chi_ev_bb["bottom"], chi_ev_bb["top"]) &
+    between(start_lng, chi_ev_bb["left"], chi_ev_bb["right"]) &
+    between(end_lat, chi_ev_bb["bottom"], chi_ev_bb["top"]) &
+    between(end_lng, chi_ev_bb["left"], chi_ev_bb["right"])
+  )
+
+popular_routes_by_user <- ggmap(chi_ev_map) +
+  geom_curve(cyclistic_routes, mapping = aes(x = start_lng, y = start_lat, xend = end_lng, yend = end_lat, alpha = total_rides, color = member_casual), linewidth = 0.5, curvature = 0.2, arrow = arrow(length = unit(0.2,"cm"), ends = "first", type = "closed")) +
+  coord_cartesian() +
+  labs(title = "Most Popular Routes by Cyclistic Users", x = "Longitude", y = "Latitude", color= "User Type", alpha = "Total Rides") +
+  scale_color_manual(values = c("member" = "#00ADEF", "casual" = "#FF00BF"))
+
+# Analyze Most Popular Routes by Cyclistic Bike Type
+popular_routes_by_bike_type <- ggmap(chi_ev_map) +
+  geom_curve(cyclistic_routes, mapping = aes(x = start_lng, y = start_lat, xend = end_lng, yend = end_lat, alpha = total_rides, color = rideable_type), linewidth = 0.5, curvature = 0.2, arrow = arrow(length = unit(0.2,"cm"), ends = "first", type = "closed")) +
+  coord_cartesian() +
+  labs(title = "Most Popular Routes by Cyclistic Bike Type", x = "Longitude", y = "Latitude", color="Bike Type", alpha = "Total Rides")+
+  scale_color_manual(values = c("classic_bike" = "#FF00BF", "docked_bike" = "#00ADEF"))
+
+# Show visualization
+popular_routes_by_user
+popular_routes_by_bike_type
+```
+
+Analysis:
+
+-   The most popular routes by Cyclistic casual users are centered around downtown of Chicago.
+
+-   The most popular routes by Cyclistic members are spread across the cities of Chicago and Evanston.
+
+-   Most Cyclistic users ride the most popular routes using classic bike.
+
+-   Cyclistic members use Cyclistic for commuting purposes.
+
+-   Cyclistic casual users use Cyclistic for recreational purposes.
+
+# Phase 5: Share
+
+After analyzing Cyclistic trip data in 2023, I've got a lot of interesting insight. Most of Cyclistic users feels the benefit for being a member of Cyclistic. This conclusion is based on fact that 65.6% of Cyclistic users are member of Cyclistic. It should be easy to get casual users to become Cyclistic members.
+
+**Conclusions from my analysis:**
+
+1.  How do annual members and regular riders use their bikes differently?
+    -   Cyclistic members never ride with docked bike while casual users choose docked bike as the last choice if classic bike and electric bike not available in the bike stations. Cyclistic users prefer to use classic bike rather than electric bike and docked bike.
+
+    -   Cyclistic members mostly rides during workday especially on Tuesday, Wednesday, and Thursday while casual users mostly rides during weekend especially on Saturday.
+
+    -   In 2023, Cyclistic members mostly rides on August while casual users mostly rides on July. The number of rides during the year patterns follows a clear pattern of seasonality in Chicago where the highest number of rides is during Summer (July and August) and the lowest number of rides is during Winter (January).
+
+    -   Cyclistic member often ride especially when going to work around 6:00 AM until 9:00 AM and when coming home from work around 6:00 PM. Cyclistic casual users usually starts ride from 6:00 AM and mostly rides around 6.00 PM.
+
+    -   Cyclistic members and casual users ride with similar distance travelled but on average Cyclistic members ride for a short time of around 12 minutes while the average of casual users ride longer around 20 minutes.
+
+    -   Cyclistic members mostly arrive and depart at Clinton St & Washington Blvd Bike Station while casual users mostly arrive and depart at Streeter Dr & Grand Ave Bike Station. Streeter Dr & Grand Ave Bike Station is ranked first in the most popular bike stations for arrivals and departures. Clinton St & Washington Blvd Bike Station is ranked sixth in the most popular bike stations for arrivals and ranked seventh in the most popular bike stations for departures.
+
+    -   Cyclistic members mostly ride across the cities of Chicago and Evanston while casual users mostly ride at downtown of Chicago. Cyclistic members use Cyclistic for commuting purposes while casual users use Cyclistic for recreational purposes.
+2.  Why do regular riders buy an annual Cyclistic membership?
+    -   Casual users would love to convert into an annual Cyclistic member if they want to use Cyclistic for commuting purposes.
+
+    -   Plans and pricing of bike usage for Cyclistic member is cheaper than casual users for long term.
+
+    -   Casual users will buy a membership if they get a suitable price for longer bike use.
+3.  How does Cyclistic use digital media to influence regular riders to become members?
+    -   Cyclistic can create a marketing campaign to positioning Cyclistic as a bike-sharing apps for recreational and fun travelling.
+
+    -   Cyclistic can offer a free trial to casual users for 2 weeks to make them consider to buy an annual Cyclistic membership.
+
+    -   Create a discount offer around 6:00 PM for casual users.
+
+    -   Create summer campaign for casual users especially on July.
+
+    -   Offer casual users a discount if they ride for more than 20 minutes.
+
+    -   Add a voucher codes for discount at most popular bike stations by casual users like Streeter Dr & Grand Ave Bike Station, DuSable Lake Shore Dr & North Blvd Bike Station, Michigan Ave & Oak St Bike Station, and DuSable Lake Shore Dr & Monroe St Bike Station.
+4.  Additional advice for Cyclistic apps
+    -   Try to make a fixed coordinates for every bike stations so it would be easier to analyze.
+
+    -   Add more electric bikes at Top 3 most popular bike stations for arrivals and departures.
+
+    -   Create electric bikes promotional offers to increase the number of usage for electric bikes also increase Cyclistic users.
